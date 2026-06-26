@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useClients } from "../../hooks/useClients";
+import { supabase } from "../../api/supabaseClient";
+import { fmtMoney } from "../../lib/pdfGenerator";
 import ConfirmModal from "./ConfirmModal";
 import Toast from "./Toast";
 
@@ -17,7 +19,51 @@ export default function ClientsTab() {
   const [saving, setSaving] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
   const [toast, setToast] = useState(null);
+  const [documents, setDocuments] = useState([]);
   const showToast = (message, type = "success") => setToast({ message, type });
+
+  // Pulled once, then matched to each client by email — email is the most
+  // reliable shared key between a saved client and the documents billed to
+  // them, since names can vary slightly (typos, "Inc." vs "Inc", etc.)
+  // between when a client was saved and when a document was created.
+  const fetchDocuments = useCallback(async () => {
+    const { data, error } = await supabase.from("billing_documents").select("*");
+    if (!error) setDocuments(data || []);
+  }, []);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  // Per-client rollup: total billed (everything), total paid (receipts +
+  // paid invoices), and outstanding (unpaid invoices) — matched by email,
+  // case-insensitively, since email is the one field unlikely to vary
+  // between how the client was saved and how documents were billed.
+  const getClientTotals = (client) => {
+    if (!client.email) return null;
+    const email = client.email.trim().toLowerCase();
+    const clientDocs = documents.filter(
+      (d) => d.client_email?.trim().toLowerCase() === email
+    );
+    if (clientDocs.length === 0) return null;
+
+    const currency = clientDocs[0]?.currency || "CAD";
+    const invoices = clientDocs.filter((d) => d.doc_type === "invoice");
+    const receipts = clientDocs.filter((d) => d.doc_type === "receipt");
+    const paidInvoices = invoices.filter((d) => d.status === "paid");
+    const outstandingInvoices = invoices.filter((d) => d.status !== "paid");
+
+    const totalPaid =
+      receipts.reduce((sum, d) => sum + Number(d.total || 0), 0) +
+      paidInvoices.reduce((sum, d) => sum + Number(d.total || 0), 0);
+    const totalOutstanding = outstandingInvoices.reduce(
+      (sum, d) => sum + Number(d.total || 0),
+      0
+    );
+    const totalBilled = invoices.reduce((sum, d) => sum + Number(d.total || 0), 0);
+
+    return { currency, totalBilled, totalPaid, totalOutstanding, docCount: clientDocs.length };
+  };
 
   const startNew = () => {
     setForm(emptyForm);
@@ -176,36 +222,63 @@ export default function ClientsTab() {
         </p>
       ) : (
         <div className="space-y-3">
-          {clients.map((client) => (
-            <div
-              key={client.id}
-              className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-              style={{ background: "#131d35", border: "1px solid rgba(45,206,137,0.1)" }}
-            >
-              <div className="min-w-0">
-                <p className="text-white font-semibold">{client.name}</p>
-                <p className="text-slate-400 text-sm truncate">
-                  {[client.email, client.phone, client.address].filter(Boolean).join(" · ")}
-                </p>
+          {clients.map((client) => {
+            const totals = getClientTotals(client);
+            return (
+              <div
+                key={client.id}
+                className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                style={{ background: "#131d35", border: "1px solid rgba(45,206,137,0.1)" }}
+              >
+                <div className="min-w-0">
+                  <p className="text-white font-semibold">{client.name}</p>
+                  <p className="text-slate-400 text-sm truncate">
+                    {[client.email, client.phone, client.address].filter(Boolean).join(" · ")}
+                  </p>
+                  {totals && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
+                      <span className="text-slate-500">
+                        Billed{" "}
+                        <span className="text-slate-300 font-medium">
+                          {fmtMoney(totals.totalBilled, totals.currency)}
+                        </span>
+                      </span>
+                      <span className="text-slate-500">
+                        Paid{" "}
+                        <span style={{ color: "#2dce89" }} className="font-medium">
+                          {fmtMoney(totals.totalPaid, totals.currency)}
+                        </span>
+                      </span>
+                      {totals.totalOutstanding > 0 && (
+                        <span className="text-slate-500">
+                          Outstanding{" "}
+                          <span style={{ color: "#f5365c" }} className="font-medium">
+                            {fmtMoney(totals.totalOutstanding, totals.currency)}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => startEdit(client)}
+                    className="text-sm px-3 py-1.5 rounded-lg text-slate-300 hover:text-white"
+                    style={{ background: "#0f1729" }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(client.id, client.name)}
+                    className="text-sm px-3 py-1.5 rounded-lg"
+                    style={{ background: "rgba(245,54,92,0.1)", color: "#f5365c" }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => startEdit(client)}
-                  className="text-sm px-3 py-1.5 rounded-lg text-slate-300 hover:text-white"
-                  style={{ background: "#0f1729" }}
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(client.id, client.name)}
-                  className="text-sm px-3 py-1.5 rounded-lg"
-                  style={{ background: "rgba(245,54,92,0.1)", color: "#f5365c" }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

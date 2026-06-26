@@ -97,6 +97,30 @@ export default function BillingTab() {
       showToast("Conversion failed: " + error.message, "error");
       return;
     }
+
+    // Converting an invoice to a receipt means it's been paid — mark the
+    // original invoice as 'paid' too, so it stops counting toward
+    // Outstanding on the Overview tab. Without this, the invoice and its
+    // receipt are only linked one-way (receipt → invoice via
+    // linked_invoice_id) and the invoice would look unpaid forever even
+    // after a receipt was issued for it.
+    if (targetType === "receipt" && doc.doc_type === "invoice") {
+      const { error: statusError } = await supabase
+        .from("billing_documents")
+        .update({ status: "paid" })
+        .eq("id", doc.id);
+      if (statusError) {
+        // Don't block the conversion over this — the receipt was created
+        // successfully — but let the person know the invoice wasn't marked.
+        showToast(
+          `Receipt created, but couldn't mark the invoice as paid: ${statusError.message}`,
+          "error"
+        );
+        fetchDocuments();
+        return;
+      }
+    }
+
     fetchDocuments();
     showToast(`Converted to ${targetType} ${PREFIX[targetType]}-${nextNum}.`);
   };
@@ -311,6 +335,14 @@ export default function BillingTab() {
                       {doc.doc_type}
                     </span>
                     <span className="text-white font-semibold">{doc.doc_number}</span>
+                    {doc.doc_type === "invoice" && doc.status === "paid" && (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: "rgba(45,206,137,0.15)", color: "#2dce89" }}
+                      >
+                        Paid
+                      </span>
+                    )}
                   </div>
                   <p className="text-slate-400 text-sm truncate">
                     {doc.client_name} · {fmtMoney(totals.total, doc.currency)} · {doc.issue_date}
