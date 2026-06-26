@@ -244,7 +244,7 @@ export default function SettingsTab() {
 
       <div>
         <label className="block text-sm text-slate-300 mb-1">Logo</label>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           {form.logoUrl && (
             <img
               src={form.logoUrl}
