@@ -58,64 +58,78 @@ const inputStyle = {
 // elements on each render, dropping keyboard focus after every character.
 function ItemRow({ item, showUnitPrices, onChange, onRemove }) {
   return (
-    <div className="grid grid-cols-12 gap-2 items-start mb-2">
+    <div
+      className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-start mb-2 p-3 sm:p-0 rounded-lg sm:rounded-none"
+      style={{ background: "rgba(255,255,255,0.02)" }}
+    >
       <input
-        className="col-span-4 rounded-lg px-3 py-2 text-white text-sm outline-none"
+        className="col-span-2 sm:col-span-4 rounded-lg px-3 py-2 text-white text-sm outline-none"
         style={inputStyle}
         placeholder="Item name"
         value={item.name}
         onChange={(e) => onChange("name", e.target.value)}
       />
       <input
-        className="col-span-3 rounded-lg px-3 py-2 text-white text-sm outline-none"
+        className="col-span-2 sm:col-span-3 rounded-lg px-3 py-2 text-white text-sm outline-none"
         style={inputStyle}
         placeholder="Detail (optional)"
         value={item.detail}
         onChange={(e) => onChange("detail", e.target.value)}
       />
-      <input
-        type="number"
-        className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
-        style={inputStyle}
-        value={item.qty}
-        onChange={(e) => onChange("qty", Number(e.target.value))}
-      />
+      <div className="col-span-1 sm:col-span-1">
+        <span className="block sm:hidden text-[11px] text-slate-500 mb-1">Qty</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          className="w-full rounded-lg px-2 py-2 text-white text-sm outline-none"
+          style={inputStyle}
+          value={item.qty}
+          onChange={(e) => onChange("qty", Number(e.target.value))}
+        />
+      </div>
       {showUnitPrices && (
         <>
-          <input
-            type="number"
-            className="col-span-2 rounded-lg px-2 py-2 text-white text-sm outline-none"
-            style={inputStyle}
-            value={item.unitPrice}
-            onChange={(e) => onChange("unitPrice", Number(e.target.value))}
-          />
-          <input
-            type="number"
-            className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
-            style={inputStyle}
-            value={item.discount}
-            onChange={(e) => onChange("discount", Number(e.target.value))}
-            title="Discount %"
-          />
+          <div className="col-span-1 sm:col-span-2">
+            <span className="block sm:hidden text-[11px] text-slate-500 mb-1">Unit Price</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-lg px-2 py-2 text-white text-sm outline-none"
+              style={inputStyle}
+              value={item.unitPrice}
+              onChange={(e) => onChange("unitPrice", Number(e.target.value))}
+            />
+          </div>
+          <div className="col-span-1 sm:col-span-1">
+            <span className="block sm:hidden text-[11px] text-slate-500 mb-1">Disc %</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="w-full rounded-lg px-2 py-2 text-white text-sm outline-none"
+              style={inputStyle}
+              value={item.discount}
+              onChange={(e) => onChange("discount", Number(e.target.value))}
+              title="Discount %"
+            />
+          </div>
         </>
       )}
       <button
         onClick={onRemove}
-        className="col-span-1 text-sm rounded-lg py-2"
-        style={{ color: "#f5365c" }}
+        className="col-span-2 sm:col-span-1 text-sm rounded-lg py-2 text-center sm:text-left"
+        style={{ color: "#f5365c", background: "rgba(245,54,92,0.08)" }}
       >
-        ✕
+        Remove item
       </button>
     </div>
   );
 }
 
-// Column labels matching the ItemRow grid below, so it's clear at a glance
-// which box is Qty vs. Unit Price vs. Discount — these line up with the
-// same columns that appear in the generated PDF.
+// Column labels matching the ItemRow grid below — desktop only, since the
+// mobile card layout already labels each field inline.
 function ItemRowHeader({ showUnitPrices }) {
   return (
-    <div className="grid grid-cols-12 gap-2 mb-1 px-1">
+    <div className="hidden sm:grid grid-cols-12 gap-2 mb-1 px-1">
       <span className="col-span-4 text-xs text-slate-500">Item name</span>
       <span className="col-span-3 text-xs text-slate-500">Detail (optional)</span>
       <span className="col-span-1 text-xs text-slate-500">Qty</span>
@@ -352,18 +366,18 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <h2 className="text-lg sm:text-xl font-bold text-white">
           {doc.id ? "Edit" : "New"} {doc.doc_title}
         </h2>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-slate-300" style={{ background: "#131d35" }}>
+          <button onClick={onCancel} className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-slate-300" style={{ background: "#131d35" }}>
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-lg font-semibold text-white disabled:opacity-50"
+            className="flex-1 sm:flex-none px-5 py-2 rounded-lg font-semibold text-white disabled:opacity-50"
             style={{ background: "linear-gradient(135deg, #2dce89, #11cdef)" }}
           >
             {saving ? "Saving..." : "Save"}
@@ -372,7 +386,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
       </div>
 
       {/* Doc type + number */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div>
           <label className="block text-xs text-slate-400 mb-1">Document Type</label>
           <select
@@ -425,7 +439,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
           ))}
         </select>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           <input placeholder="Client name" className="rounded-lg px-3 py-2 text-white text-sm outline-none" style={inputStyle} value={doc.client_name} onChange={set("client_name")} />
           <input placeholder="Client email" className="rounded-lg px-3 py-2 text-white text-sm outline-none" style={inputStyle} value={doc.client_email} onChange={set("client_email")} />
           <input placeholder="Client phone" className="rounded-lg px-3 py-2 text-white text-sm outline-none" style={inputStyle} value={doc.client_phone} onChange={set("client_phone")} />
@@ -445,7 +459,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
       </div>
 
       {/* Dates */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <div>
           <label className="block text-xs text-slate-400 mb-1">Issue Date</label>
           <input type="date" className="w-full rounded-lg px-3 py-2 text-white text-sm outline-none" style={inputStyle} value={doc.issue_date} onChange={set("issue_date")} />
@@ -465,35 +479,39 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
       </div>
 
       {/* Toggles */}
-      <div className="flex items-center gap-6 mb-2 flex-wrap">
-        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-          <input type="checkbox" checked={doc.show_unit_prices} onChange={() => setDoc((d) => ({ ...d, show_unit_prices: !d.show_unit_prices }))} />
-          Show unit prices
-        </label>
-        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-          <input type="checkbox" checked={doc.use_systems} onChange={toggleUseSystems} />
-          Group items by system
-        </label>
-        <div className="flex items-center gap-2 text-sm text-slate-300">
-          Tax label:
-          <input
-            type="text"
-            className="w-24 rounded-lg px-2 py-1 text-white text-sm outline-none"
-            style={inputStyle}
-            placeholder="GST"
-            value={doc.tax_label}
-            onChange={set("tax_label")}
-          />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 mb-2">
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={doc.show_unit_prices} onChange={() => setDoc((d) => ({ ...d, show_unit_prices: !d.show_unit_prices }))} />
+            Show unit prices
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={doc.use_systems} onChange={toggleUseSystems} />
+            Group items by system
+          </label>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-300">
-          Tax %:
-          <input
-            type="number"
-            className="w-20 rounded-lg px-2 py-1 text-white text-sm outline-none"
-            style={inputStyle}
-            value={doc.tax_rate}
-            onChange={set("tax_rate")}
-          />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-300">
+            Tax label:
+            <input
+              type="text"
+              className="w-20 sm:w-24 rounded-lg px-2 py-1 text-white text-sm outline-none"
+              style={inputStyle}
+              placeholder="GST"
+              value={doc.tax_label}
+              onChange={set("tax_label")}
+            />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-300">
+            Tax %:
+            <input
+              type="number"
+              className="w-16 sm:w-20 rounded-lg px-2 py-1 text-white text-sm outline-none"
+              style={inputStyle}
+              value={doc.tax_rate}
+              onChange={set("tax_rate")}
+            />
+          </div>
         </div>
       </div>
       <p className="text-xs text-slate-500 mb-6">
@@ -522,14 +540,14 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
         <div className="mb-6 space-y-5">
           {doc.systems.map((system, sIdx) => (
             <div key={system.id} className="rounded-xl p-4" style={{ background: "#131d35" }}>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                 <input
-                  className="rounded-lg px-3 py-2 text-white text-sm font-semibold outline-none w-1/2"
+                  className="rounded-lg px-3 py-2 text-white text-sm font-semibold outline-none w-full sm:w-1/2"
                   style={inputStyle}
                   value={system.name}
                   onChange={(e) => updateSystemField(sIdx, "name", e.target.value)}
                 />
-                <button onClick={() => removeSystem(sIdx)} className="text-sm" style={{ color: "#f5365c" }}>
+                <button onClick={() => removeSystem(sIdx)} className="text-sm text-left sm:text-right" style={{ color: "#f5365c" }}>
                   Remove System
                 </button>
               </div>
@@ -555,7 +573,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
       )}
 
       {/* Notes & Terms */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div>
           <label className="block text-xs text-slate-400 mb-1">Notes</label>
           <textarea rows={3} className="w-full rounded-lg px-3 py-2 text-white text-sm outline-none" style={inputStyle} value={doc.notes} onChange={set("notes")} />

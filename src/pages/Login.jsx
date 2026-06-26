@@ -49,6 +49,8 @@ export default function Login() {
             <input
               type="email"
               required
+              autoComplete="email"
+              inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg px-4 py-3 text-white outline-none"
@@ -67,6 +69,7 @@ export default function Login() {
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg px-4 py-3 text-white outline-none"

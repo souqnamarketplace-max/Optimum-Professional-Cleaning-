@@ -161,12 +161,12 @@ export default function ClientsTab() {
           {clients.map((client) => (
             <div
               key={client.id}
-              className="rounded-xl p-5 flex items-center justify-between flex-wrap gap-3"
+              className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
               style={{ background: "#131d35", border: "1px solid rgba(45,206,137,0.1)" }}
             >
-              <div>
+              <div className="min-w-0">
                 <p className="text-white font-semibold">{client.name}</p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-slate-400 text-sm truncate">
                   {[client.email, client.phone, client.address].filter(Boolean).join(" · ")}
                 </p>
               </div>

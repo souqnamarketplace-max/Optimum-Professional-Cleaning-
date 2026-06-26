@@ -82,52 +82,89 @@ export default function BillingTab() {
     fetchDocuments();
   };
 
+  // Shared mapping from the Supabase row shape to what generateDocumentPDF
+  // expects — used by both the PDF download button and the Send flow so
+  // they can never drift apart.
+  const mapDocForPdf = (doc) => ({
+    docType: doc.doc_type,
+    docNumber: doc.doc_number,
+    docTitle: doc.doc_title,
+    clientName: doc.client_name,
+    clientEmail: doc.client_email,
+    clientAddress: doc.client_address,
+    issueDate: doc.issue_date,
+    dueDate: doc.due_date,
+    validUntil: doc.valid_until,
+    convertedFrom: doc.converted_from,
+    items: doc.items || [],
+    systems: doc.systems || [],
+    useSystems: doc.use_systems,
+    showUnitPrices: doc.show_unit_prices,
+    taxLabel: doc.tax_label,
+    taxRate: doc.tax_rate,
+    currency: doc.currency,
+    notes: doc.notes,
+    terms: doc.terms,
+  });
+
+  const companySettingsForPdf = () => ({
+    companyName: settings?.company_name,
+    email: settings?.email,
+    website: settings?.website,
+    address: settings?.address,
+    logoUrl: settings?.logo_url,
+  });
+
   const handleDownload = async (doc) => {
     setDownloadingId(doc.id);
-    const mapped = {
-      docType: doc.doc_type,
-      docNumber: doc.doc_number,
-      docTitle: doc.doc_title,
-      clientName: doc.client_name,
-      clientEmail: doc.client_email,
-      clientAddress: doc.client_address,
-      issueDate: doc.issue_date,
-      dueDate: doc.due_date,
-      validUntil: doc.valid_until,
-      convertedFrom: doc.converted_from,
-      items: doc.items || [],
-      systems: doc.systems || [],
-      useSystems: doc.use_systems,
-      showUnitPrices: doc.show_unit_prices,
-      taxLabel: doc.tax_label,
-      taxRate: doc.tax_rate,
-      currency: doc.currency,
-      notes: doc.notes,
-      terms: doc.terms,
-    };
-    const companySettings = {
-      companyName: settings?.company_name,
-      email: settings?.email,
-      website: settings?.website,
-      address: settings?.address,
-      logoUrl: settings?.logo_url,
-    };
     try {
-      await downloadDocumentPDF(mapped, companySettings, `${doc.doc_type}-${doc.doc_number}.pdf`);
+      await downloadDocumentPDF(
+        mapDocForPdf(doc),
+        companySettingsForPdf(),
+        `${doc.doc_type}-${doc.doc_number}.pdf`
+      );
     } finally {
       setDownloadingId(null);
     }
   };
 
-  const handleSend = (doc) => {
-    const subject = encodeURIComponent(`${doc.doc_title || doc.doc_type} ${doc.doc_number}`);
-    const body = encodeURIComponent(
-      `Hi ${doc.client_name || ""},\n\nPlease find attached your ${doc.doc_type} ${doc.doc_number}.\n\nThank you,\n${settings?.company_name || ""}`
-    );
-    window.open(
-      `https://mail.ionos.com/?to=${doc.client_email || ""}&subject=${subject}&body=${body}`,
-      "_blank"
-    );
+  // There's no browser API to attach a file to an email automatically —
+  // attaching always requires a person to do it once the compose window is
+  // open. So "Send" does the next best thing: downloads the PDF (so it's
+  // sitting in Downloads ready to drag in), then opens a mailto: link,
+  // which launches whatever email app/account the customer already has set
+  // as default (Gmail, Outlook, Apple Mail, etc) with the subject, body,
+  // and client's address pre-filled — sent from the business's own email,
+  // since that's whichever account is logged into their default mail app.
+  const handleSend = async (doc) => {
+    setDownloadingId(doc.id);
+    try {
+      await downloadDocumentPDF(
+        mapDocForPdf(doc),
+        companySettingsForPdf(),
+        `${doc.doc_type}-${doc.doc_number}.pdf`
+      );
+    } finally {
+      setDownloadingId(null);
+    }
+
+    const senderName = settings?.company_name || "";
+    const subject = `${doc.doc_title || doc.doc_type} ${doc.doc_number}`;
+    const body =
+      `Hi ${doc.client_name || ""},\n\n` +
+      `Please find attached your ${doc.doc_type} ${doc.doc_number}.\n\n` +
+      `The PDF was just downloaded to your computer — attach it to this email before sending.\n\n` +
+      `Thank you,\n${senderName}`;
+
+    const mailtoUrl = `mailto:${encodeURIComponent(doc.client_email || "")}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+
+    // A brief delay so the download has visibly started before the email
+    // app takes over focus — purely a UX nicety, not required for either to work.
+    setTimeout(() => {
+      window.location.href = mailtoUrl;
+    }, 400);
   };
 
   if (editingDoc !== null) {
@@ -149,22 +186,22 @@ export default function BillingTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h2 className="text-xl font-bold text-white">Billing</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-white">Billing</h2>
         <button
           onClick={() => setEditingDoc("new")}
-          className="rounded-lg px-5 py-2.5 font-semibold text-white text-sm transition-opacity hover:opacity-90"
+          className="rounded-lg px-4 sm:px-5 py-2.5 font-semibold text-white text-sm transition-opacity hover:opacity-90"
           style={{ background: "linear-gradient(135deg, #2dce89, #11cdef)" }}
         >
           + New Document
         </button>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
         {["all", ...DOC_TYPES].map((t) => (
           <button
             key={t}
             onClick={() => setFilterType(t)}
-            className="px-4 py-1.5 rounded-full text-sm capitalize"
+            className="px-4 py-1.5 rounded-full text-sm capitalize shrink-0"
             style={{
               background: filterType === t ? "#2dce89" : "#131d35",
               color: filterType === t ? "#0a0e1a" : "#94a3b8",
@@ -191,11 +228,11 @@ export default function BillingTab() {
             return (
               <div
                 key={doc.id}
-                className="rounded-xl p-5 flex items-center justify-between flex-wrap gap-3"
+                className="rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                 style={{ background: "#131d35", border: "1px solid rgba(45,206,137,0.1)" }}
               >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span
                       className="text-xs font-semibold px-2 py-0.5 rounded-full uppercase"
                       style={{ background: "rgba(45,206,137,0.15)", color: "#2dce89" }}
@@ -204,7 +241,7 @@ export default function BillingTab() {
                     </span>
                     <span className="text-white font-semibold">{doc.doc_number}</span>
                   </div>
-                  <p className="text-slate-400 text-sm">
+                  <p className="text-slate-400 text-sm truncate">
                     {doc.client_name} · {fmtMoney(totals.total, doc.currency)} · {doc.issue_date}
                   </p>
                 </div>
@@ -227,10 +264,12 @@ export default function BillingTab() {
                   </button>
                   <button
                     onClick={() => handleSend(doc)}
-                    className="text-sm px-3 py-1.5 rounded-lg"
+                    disabled={downloadingId === doc.id}
+                    className="text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
                     style={{ background: "#0f1729", color: "#2dce89" }}
+                    title="Downloads the PDF, then opens your email app — attach the downloaded file before sending"
                   >
-                    Send
+                    {downloadingId === doc.id ? "Preparing..." : "Send"}
                   </button>
                   {doc.doc_type === "quote" && (
                     <button
