@@ -3,6 +3,7 @@ import { supabase } from "../../api/supabaseClient";
 import { calcDocumentTotals, fmtMoney } from "../../lib/pdfGenerator";
 import { useSiteSettings } from "../../hooks/useSiteSettings";
 import { useClients } from "../../hooks/useClients";
+import Toast from "./Toast";
 
 const emptyItem = () => ({
   id: crypto.randomUUID(),
@@ -164,6 +165,8 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
     };
   });
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = "success") => setToast({ message, type });
   const [selectedClientId, setSelectedClientId] = useState("");
   const [saveAsNewClient, setSaveAsNewClient] = useState(false);
 
@@ -301,7 +304,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
         { p_doc_type: doc.doc_type }
       );
       if (numError) {
-        alert("Could not generate document number: " + numError.message);
+        showToast("Could not generate document number: " + numError.message, "error");
         setSaving(false);
         return;
       }
@@ -358,7 +361,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
     }
     setSaving(false);
     if (error) {
-      alert("Save failed: " + error.message);
+      showToast("Save failed: " + error.message, "error");
       return;
     }
     onSaved();
@@ -601,6 +604,8 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
           <span style={{ color: "#2dce89" }}>{fmtMoney(totals.total, doc.currency)}</span>
         </div>
       </div>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

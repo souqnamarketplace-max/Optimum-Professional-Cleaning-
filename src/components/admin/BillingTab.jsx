@@ -3,6 +3,8 @@ import { supabase } from "../../api/supabaseClient";
 import { useSiteSettings } from "../../hooks/useSiteSettings";
 import { useGmailSend } from "../../hooks/useGmailSend";
 import DocumentEditor from "./DocumentEditor";
+import ConfirmModal from "./ConfirmModal";
+import Toast from "./Toast";
 import { downloadDocumentPDF, getDocumentPDFBlob, calcDocumentTotals, fmtMoney } from "../../lib/pdfGenerator";
 import { buildDocEmail } from "../../lib/emailTemplates";
 
@@ -15,8 +17,12 @@ export default function BillingTab() {
   const [filterType, setFilterType] = useState("all");
   const [downloadingId, setDownloadingId] = useState(null);
   const [sendingId, setSendingId] = useState(null);
+  const [confirmState, setConfirmState] = useState(null); // { title, message, detail, onConfirm, destructive }
+  const [toast, setToast] = useState(null); // { message, type: 'success' | 'error' }
   const { settings } = useSiteSettings();
   const gmail = useGmailSend();
+
+  const showToast = (message, type = "success") => setToast({ message, type });
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -32,10 +38,18 @@ export default function BillingTab() {
     fetchDocuments();
   }, [fetchDocuments]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this document? This cannot be undone.")) return;
-    await supabase.from("billing_documents").delete().eq("id", id);
-    fetchDocuments();
+  const handleDelete = (id) => {
+    setConfirmState({
+      title: "Delete this document?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmState(null);
+        await supabase.from("billing_documents").delete().eq("id", id);
+        fetchDocuments();
+      },
+    });
   };
 
   const PREFIX = { quote: "Q", invoice: "INV", receipt: "REC" };
@@ -47,7 +61,7 @@ export default function BillingTab() {
       { p_doc_type: targetType }
     );
     if (numError) {
-      alert("Could not generate document number: " + numError.message);
+      showToast("Could not generate document number: " + numError.message, "error");
       return;
     }
 
@@ -80,10 +94,11 @@ export default function BillingTab() {
     };
     const { error } = await supabase.from("billing_documents").insert([payload]);
     if (error) {
-      alert("Conversion failed: " + error.message);
+      showToast("Conversion failed: " + error.message, "error");
       return;
     }
     fetchDocuments();
+    showToast(`Converted to ${targetType} ${PREFIX[targetType]}-${nextNum}.`);
   };
 
   // Shared mapping from the Supabase row shape to what generateDocumentPDF
@@ -154,33 +169,36 @@ export default function BillingTab() {
         settings
       );
 
-      const confirmed = window.confirm(
-        `Send this ${doc.doc_type} to ${doc.client_email || "(no email on file)"} from ${gmail.connectedEmail}?\n\n` +
-          `Subject: ${subject}`
-      );
-      if (!confirmed) return;
-
       if (!doc.client_email) {
-        alert("This document has no client email saved — add one before sending.");
+        showToast("This document has no client email saved — add one before sending.", "error");
         return;
       }
 
-      setSendingId(doc.id);
-      try {
-        const pdfBlob = await getDocumentPDFBlob(mapDocForPdf(doc), companySettingsForPdf());
-        await gmail.sendEmail({
-          to: doc.client_email,
-          subject,
-          bodyText: body,
-          pdfBlob,
-          pdfFilename: `${doc.doc_type}-${doc.doc_number}.pdf`,
-        });
-        alert(`Sent to ${doc.client_email}.`);
-      } catch (err) {
-        alert("Send failed: " + err.message);
-      } finally {
-        setSendingId(null);
-      }
+      setConfirmState({
+        title: `Send this ${doc.doc_type}?`,
+        message: `To ${doc.client_email}\nFrom ${gmail.connectedEmail}`,
+        detail: `Subject: ${subject}`,
+        confirmLabel: "Send",
+        onConfirm: async () => {
+          setConfirmState(null);
+          setSendingId(doc.id);
+          try {
+            const pdfBlob = await getDocumentPDFBlob(mapDocForPdf(doc), companySettingsForPdf());
+            await gmail.sendEmail({
+              to: doc.client_email,
+              subject,
+              bodyText: body,
+              pdfBlob,
+              pdfFilename: `${doc.doc_type}-${doc.doc_number}.pdf`,
+            });
+            showToast(`Sent to ${doc.client_email}.`);
+          } catch (err) {
+            showToast("Send failed: " + err.message, "error");
+          } finally {
+            setSendingId(null);
+          }
+        },
+      });
       return;
     }
 
@@ -365,6 +383,18 @@ export default function BillingTab() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(confirmState)}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        detail={confirmState?.detail}
+        confirmLabel={confirmState?.confirmLabel}
+        destructive={confirmState?.destructive}
+        onConfirm={confirmState?.onConfirm}
+        onCancel={() => setConfirmState(null)}
+      />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

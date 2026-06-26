@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useClients } from "../../hooks/useClients";
+import ConfirmModal from "./ConfirmModal";
+import Toast from "./Toast";
 
 const inputStyle = {
   background: "#0f1729",
@@ -13,6 +15,9 @@ export default function ClientsTab() {
   const [editingId, setEditingId] = useState(null); // null = list, "new" = adding, id = editing
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = "success") => setToast({ message, type });
 
   const startNew = () => {
     setForm(emptyForm);
@@ -32,32 +37,43 @@ export default function ClientsTab() {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      alert("Client name is required.");
+      showToast("Client name is required.", "error");
       return;
     }
     setSaving(true);
     try {
       if (editingId === "new") {
         await addClient(form);
+        showToast(`${form.name} added.`);
       } else {
         await updateClient(editingId, form);
+        showToast(`${form.name} updated.`);
       }
       setEditingId(null);
       setForm(emptyForm);
     } catch (err) {
-      alert("Save failed: " + err.message);
+      showToast("Save failed: " + err.message, "error");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this client? This won't affect past quotes/invoices.")) return;
-    try {
-      await deleteClient(id);
-    } catch (err) {
-      alert("Delete failed: " + err.message);
-    }
+  const handleDelete = (id, name) => {
+    setConfirmState({
+      title: "Delete this client?",
+      message: "This won't affect past quotes or invoices.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          await deleteClient(id);
+          showToast(`${name} deleted.`);
+        } catch (err) {
+          showToast("Delete failed: " + err.message, "error");
+        }
+      },
+    });
   };
 
   if (editingId !== null) {
@@ -133,6 +149,8 @@ export default function ClientsTab() {
             {saving ? "Saving..." : "Save Client"}
           </button>
         </div>
+
+        <Toast toast={toast} onDismiss={() => setToast(null)} />
       </div>
     );
   }
@@ -179,7 +197,7 @@ export default function ClientsTab() {
                   Edit
                 </button>
                 <button
-                  onClick={() => handleDelete(client.id)}
+                  onClick={() => handleDelete(client.id, client.name)}
                   className="text-sm px-3 py-1.5 rounded-lg"
                   style={{ background: "rgba(245,54,92,0.1)", color: "#f5365c" }}
                 >
@@ -190,6 +208,17 @@ export default function ClientsTab() {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(confirmState)}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        confirmLabel={confirmState?.confirmLabel}
+        destructive={confirmState?.destructive}
+        onConfirm={confirmState?.onConfirm}
+        onCancel={() => setConfirmState(null)}
+      />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }
