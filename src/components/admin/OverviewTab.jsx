@@ -5,11 +5,14 @@ import { fmtMoney } from "../../lib/pdfGenerator";
 function StatCard({ label, value, accent }) {
   return (
     <div
-      className="rounded-xl p-5"
+      className="rounded-xl p-4 sm:p-5 min-w-0"
       style={{ background: "#131d35", border: "1px solid rgba(45,206,137,0.1)" }}
     >
-      <p className="text-slate-400 text-sm mb-1">{label}</p>
-      <p className="text-2xl font-bold" style={{ color: accent || "#fff" }}>
+      <p className="text-slate-400 text-xs sm:text-sm mb-1 truncate">{label}</p>
+      <p
+        className="text-lg sm:text-2xl font-bold break-words"
+        style={{ color: accent || "#fff" }}
+      >
         {value}
       </p>
     </div>
@@ -194,20 +197,20 @@ export default function OverviewTab({ onNavigate }) {
           {recent.map((doc) => (
             <div
               key={doc.id}
-              className="rounded-lg px-4 py-3 flex items-center justify-between"
+              className="rounded-lg px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
               style={{ background: "#131d35" }}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-wrap">
                 <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded-full uppercase"
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full uppercase shrink-0"
                   style={{ background: "rgba(45,206,137,0.15)", color: "#2dce89" }}
                 >
                   {doc.doc_type}
                 </span>
-                <span className="text-white text-sm font-medium">{doc.doc_number}</span>
-                <span className="text-slate-400 text-sm">{doc.client_name}</span>
+                <span className="text-white text-sm font-medium shrink-0">{doc.doc_number}</span>
+                <span className="text-slate-400 text-sm truncate">{doc.client_name}</span>
               </div>
-              <span className="text-slate-300 text-sm">
+              <span className="text-slate-300 text-sm shrink-0">
                 {fmtMoney(doc.total, doc.currency)}
               </span>
             </div>

@@ -40,7 +40,16 @@ const ICONS = {
 
 export default function Dashboard() {
   const [tab, setTab] = useState("overview");
+  const [billingClientFilter, setBillingClientFilter] = useState(null);
   const { logout, user } = useAuth();
+
+  // Lets ClientsTab jump straight to Billing pre-filtered to one client,
+  // instead of just showing a total with no way to see which documents
+  // make it up.
+  const goToClientBilling = (client) => {
+    setBillingClientFilter(client);
+    setTab("billing");
+  };
 
   const tabs = [
     { key: "overview", label: "Overview" },
@@ -74,7 +83,10 @@ export default function Dashboard() {
           {tabs.map((t) => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => {
+                if (t.key !== "billing") setBillingClientFilter(null);
+                setTab(t.key);
+              }}
               className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium"
               style={{
                 background: tab === t.key ? "rgba(45,206,137,0.12)" : "transparent",
@@ -88,8 +100,13 @@ export default function Dashboard() {
 
         <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 min-w-0">
           {tab === "overview" && <OverviewTab onNavigate={setTab} />}
-          {tab === "billing" && <BillingTab />}
-          {tab === "clients" && <ClientsTab />}
+          {tab === "billing" && (
+            <BillingTab
+              initialClientFilter={billingClientFilter}
+              onClientFilterConsumed={() => setBillingClientFilter(null)}
+            />
+          )}
+          {tab === "clients" && <ClientsTab onViewBilling={goToClientBilling} />}
           {tab === "settings" && <SettingsTab />}
         </main>
       </div>
@@ -106,7 +123,10 @@ export default function Dashboard() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => {
+              if (t.key !== "billing") setBillingClientFilter(null);
+              setTab(t.key);
+            }}
             className="flex-1 flex flex-col items-center justify-center gap-1 py-2"
             style={{ color: tab === t.key ? "#2dce89" : "#64748a" }}
           >

@@ -12,7 +12,7 @@ const inputStyle = {
 
 const emptyForm = { name: "", email: "", address: "", phone: "", notes: "" };
 
-export default function ClientsTab() {
+export default function ClientsTab({ onViewBilling }) {
   const { clients, loading, addClient, updateClient, deleteClient } = useClients();
   const [editingId, setEditingId] = useState(null); // null = list, "new" = adding, id = editing
   const [form, setForm] = useState(emptyForm);
@@ -181,7 +181,7 @@ export default function ClientsTab() {
         <div className="flex gap-2 mt-6">
           <button
             onClick={() => setEditingId(null)}
-            className="px-4 py-2 rounded-lg text-slate-300"
+            className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-slate-300"
             style={{ background: "#131d35" }}
           >
             Cancel
@@ -189,7 +189,7 @@ export default function ClientsTab() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-lg font-semibold text-white disabled:opacity-50"
+            className="flex-1 sm:flex-none px-5 py-2 rounded-lg font-semibold text-white disabled:opacity-50"
             style={{ background: "linear-gradient(135deg, #2dce89, #11cdef)" }}
           >
             {saving ? "Saving..." : "Save Client"}
@@ -203,11 +203,11 @@ export default function ClientsTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-white">Clients</h2>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h2 className="text-lg sm:text-xl font-bold text-white">Clients</h2>
         <button
           onClick={startNew}
-          className="rounded-lg px-5 py-2.5 font-semibold text-white text-sm transition-opacity hover:opacity-90"
+          className="rounded-lg px-4 sm:px-5 py-2.5 font-semibold text-white text-sm transition-opacity hover:opacity-90"
           style={{ background: "linear-gradient(135deg, #2dce89, #11cdef)" }}
         >
           + New Client
@@ -260,7 +260,16 @@ export default function ClientsTab() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {totals && (
+                    <button
+                      onClick={() => onViewBilling?.(client)}
+                      className="text-sm px-3 py-1.5 rounded-lg"
+                      style={{ background: "rgba(17,205,239,0.12)", color: "#11cdef" }}
+                    >
+                      View billing
+                    </button>
+                  )}
                   <button
                     onClick={() => startEdit(client)}
                     className="text-sm px-3 py-1.5 rounded-lg text-slate-300 hover:text-white"

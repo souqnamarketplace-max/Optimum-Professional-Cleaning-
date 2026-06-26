@@ -10,11 +10,12 @@ import { buildDocEmail } from "../../lib/emailTemplates";
 
 const DOC_TYPES = ["quote", "invoice", "receipt"];
 
-export default function BillingTab() {
+export default function BillingTab({ initialClientFilter, onClientFilterConsumed }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingDoc, setEditingDoc] = useState(null); // null = list view, "new" = creating, object = editing
   const [filterType, setFilterType] = useState("all");
+  const [clientSearch, setClientSearch] = useState(initialClientFilter?.name || initialClientFilter?.email || "");
   const [downloadingId, setDownloadingId] = useState(null);
   const [sendingId, setSendingId] = useState(null);
   const [confirmState, setConfirmState] = useState(null); // { title, message, detail, onConfirm, destructive }
@@ -23,6 +24,15 @@ export default function BillingTab() {
   const gmail = useGmailSend();
 
   const showToast = (message, type = "success") => setToast({ message, type });
+
+  // If we arrived here from "View billing" on a client card, the filter
+  // is already applied via clientSearch's initial value above — this just
+  // tells Dashboard it's been picked up, so switching away and back to
+  // Billing later doesn't re-apply a stale filter unexpectedly.
+  useEffect(() => {
+    if (initialClientFilter) onClientFilterConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -275,8 +285,16 @@ export default function BillingTab() {
     );
   }
 
-  const filtered =
-    filterType === "all" ? documents : documents.filter((d) => d.doc_type === filterType);
+  const filtered = documents
+    .filter((d) => filterType === "all" || d.doc_type === filterType)
+    .filter((d) => {
+      if (!clientSearch.trim()) return true;
+      const q = clientSearch.trim().toLowerCase();
+      return (
+        d.client_name?.toLowerCase().includes(q) ||
+        d.client_email?.toLowerCase().includes(q)
+      );
+    });
 
   return (
     <div>
@@ -289,6 +307,25 @@ export default function BillingTab() {
         >
           + New Document
         </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <input
+          type="text"
+          value={clientSearch}
+          onChange={(e) => setClientSearch(e.target.value)}
+          placeholder="Search by client name or email..."
+          className="w-full sm:max-w-xs rounded-lg px-4 py-2 text-white text-sm outline-none"
+          style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
+        />
+        {clientSearch.trim() && (
+          <button
+            onClick={() => setClientSearch("")}
+            className="text-sm text-slate-400 hover:text-white text-left sm:text-center"
+          >
+            Clear filter
+          </button>
+        )}
       </div>
 
       <div className="flex gap-2 mb-6 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
@@ -310,7 +347,11 @@ export default function BillingTab() {
       {loading ? (
         <p className="text-slate-400">Loading...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-slate-400">No documents yet.</p>
+        <p className="text-slate-400">
+          {documents.length === 0
+            ? "No documents yet."
+            : "No documents match this filter."}
+        </p>
       ) : (
         <div className="space-y-3">
           {filtered.map((doc) => {
