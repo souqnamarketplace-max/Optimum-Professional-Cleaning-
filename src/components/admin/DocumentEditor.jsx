@@ -40,6 +40,70 @@ function blankDoc() {
   };
 }
 
+const inputStyle = {
+  background: "#0f1729",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+// Defined OUTSIDE DocumentEditor so it keeps a stable component identity
+// across re-renders. Previously this was defined inside DocumentEditor,
+// which meant every keystroke (every setDoc call) redefined ItemRow as a
+// "new" component type — React would then unmount/remount the <input>
+// elements on each render, dropping keyboard focus after every character.
+function ItemRow({ item, showUnitPrices, onChange, onRemove }) {
+  return (
+    <div className="grid grid-cols-12 gap-2 items-start mb-2">
+      <input
+        className="col-span-4 rounded-lg px-3 py-2 text-white text-sm outline-none"
+        style={inputStyle}
+        placeholder="Item name"
+        value={item.name}
+        onChange={(e) => onChange("name", e.target.value)}
+      />
+      <input
+        className="col-span-3 rounded-lg px-3 py-2 text-white text-sm outline-none"
+        style={inputStyle}
+        placeholder="Detail (optional)"
+        value={item.detail}
+        onChange={(e) => onChange("detail", e.target.value)}
+      />
+      <input
+        type="number"
+        className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
+        style={inputStyle}
+        value={item.qty}
+        onChange={(e) => onChange("qty", Number(e.target.value))}
+      />
+      {showUnitPrices && (
+        <>
+          <input
+            type="number"
+            className="col-span-2 rounded-lg px-2 py-2 text-white text-sm outline-none"
+            style={inputStyle}
+            value={item.unitPrice}
+            onChange={(e) => onChange("unitPrice", Number(e.target.value))}
+          />
+          <input
+            type="number"
+            className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
+            style={inputStyle}
+            value={item.discount}
+            onChange={(e) => onChange("discount", Number(e.target.value))}
+            title="Discount %"
+          />
+        </>
+      )}
+      <button
+        onClick={onRemove}
+        className="col-span-1 text-sm rounded-lg py-2"
+        style={{ color: "#f5365c" }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
   const [doc, setDoc] = useState(() => {
     if (!initialDoc) return blankDoc();
@@ -172,63 +236,6 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
     onSaved();
   };
 
-  const inputStyle = {
-    background: "#0f1729",
-    border: "1px solid rgba(255,255,255,0.08)",
-  };
-
-  const ItemRow = ({ item, onChange, onRemove }) => (
-    <div className="grid grid-cols-12 gap-2 items-start mb-2">
-      <input
-        className="col-span-4 rounded-lg px-3 py-2 text-white text-sm outline-none"
-        style={inputStyle}
-        placeholder="Item name"
-        value={item.name}
-        onChange={(e) => onChange("name", e.target.value)}
-      />
-      <input
-        className="col-span-3 rounded-lg px-3 py-2 text-white text-sm outline-none"
-        style={inputStyle}
-        placeholder="Detail (optional)"
-        value={item.detail}
-        onChange={(e) => onChange("detail", e.target.value)}
-      />
-      <input
-        type="number"
-        className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
-        style={inputStyle}
-        value={item.qty}
-        onChange={(e) => onChange("qty", Number(e.target.value))}
-      />
-      {doc.show_unit_prices && (
-        <>
-          <input
-            type="number"
-            className="col-span-2 rounded-lg px-2 py-2 text-white text-sm outline-none"
-            style={inputStyle}
-            value={item.unitPrice}
-            onChange={(e) => onChange("unitPrice", Number(e.target.value))}
-          />
-          <input
-            type="number"
-            className="col-span-1 rounded-lg px-2 py-2 text-white text-sm outline-none"
-            style={inputStyle}
-            value={item.discount}
-            onChange={(e) => onChange("discount", Number(e.target.value))}
-            title="Discount %"
-          />
-        </>
-      )}
-      <button
-        onClick={onRemove}
-        className="col-span-1 text-sm rounded-lg py-2"
-        style={{ color: "#f5365c" }}
-      >
-        ✕
-      </button>
-    </div>
-  );
-
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
@@ -337,6 +344,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
             <ItemRow
               key={item.id}
               item={item}
+              showUnitPrices={doc.show_unit_prices}
               onChange={(field, value) => updateItem(idx, field, value)}
               onRemove={() => removeItem(idx)}
             />
@@ -364,6 +372,7 @@ export default function DocumentEditor({ initialDoc, onSaved, onCancel }) {
                 <ItemRow
                   key={item.id}
                   item={item}
+                  showUnitPrices={doc.show_unit_prices}
                   onChange={(field, value) => updateSystemItem(sIdx, iIdx, field, value)}
                   onRemove={() => removeSystemItem(sIdx, iIdx)}
                 />

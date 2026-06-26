@@ -2,6 +2,26 @@ import React, { useState, useEffect } from "react";
 import { useSiteSettings } from "../../hooks/useSiteSettings";
 import { supabase } from "../../api/supabaseClient";
 
+// Defined OUTSIDE SettingsTab so it keeps a stable identity across re-renders.
+// If this lived inside SettingsTab, every keystroke would redefine it as a
+// "new" component, forcing React to remount the <input> and drop focus —
+// that's what caused the "click after every character" bug.
+function Field({ label, field, type = "text", placeholder, value, onChange }) {
+  return (
+    <div>
+      <label className="block text-sm text-slate-300 mb-1">{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full rounded-lg px-4 py-3 text-white outline-none"
+        style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
+      />
+    </div>
+  );
+}
+
 export default function SettingsTab() {
   const { settings, loading, updateSettings } = useSiteSettings();
   const [form, setForm] = useState({
@@ -75,20 +95,6 @@ export default function SettingsTab() {
 
   if (loading) return <p className="text-slate-400">Loading settings...</p>;
 
-  const Field = ({ label, field, type = "text", placeholder }) => (
-    <div>
-      <label className="block text-sm text-slate-300 mb-1">{label}</label>
-      <input
-        type={type}
-        value={form[field]}
-        onChange={handleChange(field)}
-        placeholder={placeholder}
-        className="w-full rounded-lg px-4 py-3 text-white outline-none"
-        style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
-      />
-    </div>
-  );
-
   return (
     <div className="max-w-2xl space-y-5">
       <h2 className="text-xl font-bold text-white mb-2">Company Settings</h2>
@@ -96,11 +102,11 @@ export default function SettingsTab() {
         This information appears on every quote, invoice, and receipt you generate.
       </p>
 
-      <Field label="Company Name" field="companyName" placeholder="Acme Inc." />
-      <Field label="Email" field="email" type="email" placeholder="hello@acme.com" />
-      <Field label="Website" field="website" placeholder="https://acme.com" />
-      <Field label="Address" field="address" placeholder="123 Main St, City, Province" />
-      <Field label="Phone (optional)" field="phone" placeholder="" />
+      <Field label="Company Name" field="companyName" placeholder="Acme Inc." value={form.companyName} onChange={handleChange("companyName")} />
+      <Field label="Email" field="email" type="email" placeholder="hello@acme.com" value={form.email} onChange={handleChange("email")} />
+      <Field label="Website" field="website" placeholder="https://acme.com" value={form.website} onChange={handleChange("website")} />
+      <Field label="Address" field="address" placeholder="123 Main St, City, Province" value={form.address} onChange={handleChange("address")} />
+      <Field label="Phone (optional)" field="phone" placeholder="" value={form.phone} onChange={handleChange("phone")} />
 
       <div>
         <label className="block text-sm text-slate-300 mb-1">Logo</label>
