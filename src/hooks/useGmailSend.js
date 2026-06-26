@@ -1,9 +1,17 @@
 import { useState, useCallback, useRef } from "react";
 
-// Gmail API scope needed to send mail as the connected account.
-// "gmail.send" is deliberately narrow — it can only send messages, it
-// cannot read the inbox, contacts, or anything else in the account.
-const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+// Two scopes requested together:
+// - gmail.send: narrow, send-only Gmail access — this is what actually
+//   lets the app send the email.
+// - email/openid: lightweight, non-sensitive scopes that let us read back
+//   which address is connected (gmail.send alone isn't enough to call any
+//   Google endpoint that returns the account's email — it's send-only by
+//   design, so a separate identity scope is required just to know who
+//   we're connected as).
+const GMAIL_SCOPE =
+  "https://www.googleapis.com/auth/gmail.send " +
+  "https://www.googleapis.com/auth/userinfo.email " +
+  "openid";
 
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
@@ -144,23 +152,23 @@ export function useGmailSend() {
               return;
             }
             try {
-              // Get the connected account's email from Gmail's own profile
-              // endpoint rather than the separate oauth2/userinfo endpoint —
-              // this only requires the Gmail API (already enabled for
-              // sending) instead of also needing the People API enabled.
+              // Now that we request the "email"/"openid" scopes alongside
+              // gmail.send, this endpoint is authorized to return the
+              // connected account's address.
               const profileRes = await fetch(
-                "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+                "https://www.googleapis.com/oauth2/v2/userinfo",
                 { headers: { Authorization: `Bearer ${response.access_token}` } }
               );
-              if (!profileRes.ok) {
-                const errBody = await profileRes.json().catch(() => ({}));
-                throw new Error(
-                  errBody.error?.message ||
-                    `Could not read the connected Gmail address (${profileRes.status}).`
-                );
+              let email = "";
+              if (profileRes.ok) {
+                const profile = await profileRes.json();
+                email = profile.email || "";
               }
-              const profile = await profileRes.json();
-              persistToken(response.access_token, profile.emailAddress, response.expires_in || 3600);
+              // A working send-capable token is the important part — if we
+              // simply couldn't look up the display address for some
+              // reason, still save the token (Send will work) rather than
+              // throwing the whole connection away over a cosmetic lookup.
+              persistToken(response.access_token, email || "Gmail account", response.expires_in || 3600);
               resolve();
             } catch (err) {
               reject(err);
