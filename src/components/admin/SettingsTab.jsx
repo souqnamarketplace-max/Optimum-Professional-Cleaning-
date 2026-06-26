@@ -317,7 +317,9 @@ export default function SettingsTab() {
           className="rounded-lg p-4 flex items-center justify-between flex-wrap gap-3"
           style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
         >
-          {gmail.isConnected ? (
+          {gmail.checking ? (
+            <p className="text-sm text-slate-400">Checking connection...</p>
+          ) : gmail.isConnected ? (
             <>
               <div>
                 <p className="text-sm text-white font-medium">Connected</p>
@@ -350,10 +352,11 @@ export default function SettingsTab() {
             {gmail.error}
           </p>
         )}
-        {!gmail.isConnected && (
+        {!gmail.isConnected && !gmail.checking && (
           <p className="text-xs text-slate-500 mt-2">
-            The connection lasts about an hour at a time — you'll be asked to
-            reconnect occasionally, which only takes a click.
+            This connection stays active once made — no need to reconnect every
+            hour or after closing the browser. You'll only be asked to connect
+            again if you click Disconnect, or if Google access is revoked.
           </p>
         )}
       </div>

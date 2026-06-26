@@ -132,7 +132,18 @@ create policy "Authenticated users can manage clients"
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
 
--- 6. Storage bucket for logo uploads
+-- 6. Public branding view — lets the login page show the company logo
+-- before anyone is authenticated, without exposing the rest of
+-- site_settings (email, address, bank/e-transfer details, etc).
+create or replace view public_branding as
+select company_name, logo_url
+from site_settings
+limit 1;
+
+grant select on public_branding to anon;
+grant select on public_branding to authenticated;
+
+-- 7. Storage bucket for logo uploads
 insert into storage.buckets (id, name, public)
 values ('assets', 'assets', true)
 on conflict (id) do nothing;
