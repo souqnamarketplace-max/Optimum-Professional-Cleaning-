@@ -388,4 +388,12 @@ export async function downloadDocumentPDF(doc, companySettings, filename) {
   pdf.save(filename || `${doc.docType}-${doc.docNumber}.pdf`);
 }
 
+// Same PDF generation, but returns a Blob instead of triggering a browser
+// download — used when the PDF needs to be attached to an email via the
+// Gmail API rather than saved to the customer's Downloads folder.
+export async function getDocumentPDFBlob(doc, companySettings) {
+  const pdf = await generateDocumentPDF(doc, companySettings);
+  return pdf.output("blob");
+}
+
 export { calcDocumentTotals, calcLineTotal, calcGroupSubtotal, fmtMoney };

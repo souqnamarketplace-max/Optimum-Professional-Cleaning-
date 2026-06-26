@@ -7,8 +7,10 @@ A standalone Quote → Invoice → Receipt billing system with login, company se
 ## What you're setting up
 
 - **Login page** → only you (the business owner) can access the dashboard
-- **Billing tab** → create Quotes, convert to Invoices, convert to Receipts. Supports grouped "systems" with subtotals, per-item discounts, show/hide unit prices, multi-currency, multi-page PDF export
-- **Settings tab** → your company name, email, website, address, logo — auto-applied to every PDF
+- **Overview tab** → counts, outstanding/paid totals, recent activity
+- **Billing tab** → create Quotes, convert to Invoices, convert to Receipts. Supports grouped "systems" with subtotals, per-item discounts, show/hide unit prices, multi-currency, GST/HST/PST/QST-style tax labels, sequential document numbers, multi-page PDF export
+- **Clients tab** → save client details once, autofill them into any new document
+- **Settings tab** → your company name, email, website, address, logo, default currency/tax, and Gmail connection — auto-applied to every PDF and email
 
 ---
 
@@ -70,6 +72,7 @@ git push -u origin main
 |---|---|
 | `VITE_SUPABASE_URL` | (from Step 2 — Project URL) |
 | `VITE_SUPABASE_ANON_KEY` | (from Step 2 — anon public key) |
+| `VITE_GOOGLE_CLIENT_ID` | optional — only needed for one-click Gmail sending, see `GMAIL_SETUP_GUIDE.md` |
 
 4. Click **Deploy**
 5. After ~1 minute, you'll get a live URL like `my-billing-system.vercel.app`
@@ -93,7 +96,7 @@ From now on, every `git push` to `main` auto-redeploys.
 - **Convert Quote → Invoice** → one click from the list view, copies all items over automatically
 - **Convert Invoice → Receipt** → marks it paid, one click
 - **Download PDF** → matches your company branding from Settings
-- **Send** → opens IONOS webmail (or your email provider) pre-filled with the document info — attach the downloaded PDF manually
+- **Send** → if Gmail is connected (Settings → Connect Gmail), sends for real with the PDF attached and an auto-written message. Otherwise downloads the PDF and opens a draft in your default email app to attach manually — see `GMAIL_SETUP_GUIDE.md` to enable one-click sending
 
 ---
 

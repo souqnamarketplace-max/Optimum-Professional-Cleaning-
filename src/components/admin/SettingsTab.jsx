@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useSiteSettings } from "../../hooks/useSiteSettings";
+import { useGmailSend } from "../../hooks/useGmailSend";
 import { supabase } from "../../api/supabaseClient";
 
 // Defined OUTSIDE SettingsTab so it keeps a stable identity across re-renders.
@@ -66,6 +67,7 @@ const CURRENCIES = [
 
 export default function SettingsTab() {
   const { settings, loading, updateSettings } = useSiteSettings();
+  const gmail = useGmailSend();
   const [form, setForm] = useState({
     companyName: "",
     email: "",
@@ -246,6 +248,73 @@ export default function SettingsTab() {
             disabled={uploading}
             className="text-sm text-slate-400"
           />
+        </div>
+      </div>
+
+      <div className="pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 className="text-sm font-semibold text-slate-300 mb-1">Sending emails</h3>
+        <p className="text-slate-500 text-xs mb-4">
+          Connect your Gmail so quotes, invoices, and receipts send automatically
+          as you — with the PDF attached and your signature below included.
+        </p>
+
+        <div
+          className="rounded-lg p-4 flex items-center justify-between flex-wrap gap-3"
+          style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          {gmail.isConnected ? (
+            <>
+              <div>
+                <p className="text-sm text-white font-medium">Connected</p>
+                <p className="text-xs text-slate-400">{gmail.connectedEmail}</p>
+              </div>
+              <button
+                onClick={gmail.disconnect}
+                className="text-sm px-3 py-1.5 rounded-lg text-slate-300"
+                style={{ background: "#131d35" }}
+              >
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-400">Not connected</p>
+              <button
+                onClick={gmail.connect}
+                disabled={gmail.connecting}
+                className="text-sm px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #2dce89, #11cdef)" }}
+              >
+                {gmail.connecting ? "Connecting..." : "Connect Gmail"}
+              </button>
+            </>
+          )}
+        </div>
+        {gmail.error && (
+          <p className="text-xs mt-2" style={{ color: "#f5365c" }}>
+            {gmail.error}
+          </p>
+        )}
+        {!gmail.isConnected && (
+          <p className="text-xs text-slate-500 mt-2">
+            The connection lasts about an hour at a time — you'll be asked to
+            reconnect occasionally, which only takes a click.
+          </p>
+        )}
+      </div>
+
+      <div className="pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 className="text-sm font-semibold text-slate-300 mb-1">Email signature</h3>
+        <p className="text-slate-500 text-xs mb-3">
+          Automatically built from the company info above — shown at the
+          bottom of every quote, invoice, and receipt email.
+        </p>
+        <div
+          className="rounded-lg p-4 text-sm text-slate-300 whitespace-pre-line"
+          style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          {[form.companyName, form.phone, form.email, form.website].filter(Boolean).join("\n") ||
+            "Fill in company info above to preview your signature."}
         </div>
       </div>
 

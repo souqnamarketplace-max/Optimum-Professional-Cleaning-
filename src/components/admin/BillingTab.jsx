@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../api/supabaseClient";
 import { useSiteSettings } from "../../hooks/useSiteSettings";
+import { useGmailSend } from "../../hooks/useGmailSend";
 import DocumentEditor from "./DocumentEditor";
-import { downloadDocumentPDF, calcDocumentTotals, fmtMoney } from "../../lib/pdfGenerator";
+import { downloadDocumentPDF, getDocumentPDFBlob, calcDocumentTotals, fmtMoney } from "../../lib/pdfGenerator";
+import { buildDocEmail } from "../../lib/emailTemplates";
 
 const DOC_TYPES = ["quote", "invoice", "receipt"];
 
@@ -12,7 +14,9 @@ export default function BillingTab() {
   const [editingDoc, setEditingDoc] = useState(null); // null = list view, "new" = creating, object = editing
   const [filterType, setFilterType] = useState("all");
   const [downloadingId, setDownloadingId] = useState(null);
+  const [sendingId, setSendingId] = useState(null);
   const { settings } = useSiteSettings();
+  const gmail = useGmailSend();
 
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
@@ -128,15 +132,59 @@ export default function BillingTab() {
     }
   };
 
-  // There's no browser API to attach a file to an email automatically —
-  // attaching always requires a person to do it once the compose window is
-  // open. So "Send" does the next best thing: downloads the PDF (so it's
-  // sitting in Downloads ready to drag in), then opens a mailto: link,
-  // which launches whatever email app/account the customer already has set
-  // as default (Gmail, Outlook, Apple Mail, etc) with the subject, body,
-  // and client's address pre-filled — sent from the business's own email,
-  // since that's whichever account is logged into their default mail app.
+  // There's no browser API to attach a file to an email automatically
+  // unless we're actually sending through an account the customer has
+  // connected. When Gmail is connected (Settings → Connect Gmail), this
+  // sends the email for real — PDF attached, auto-written subject/body,
+  // signature included — as the customer's own Gmail account.
+  // When Gmail isn't connected, it falls back to downloading the PDF and
+  // opening a mailto: draft for the customer to attach manually.
   const handleSend = async (doc) => {
+    if (gmail.isConnected) {
+      const { subject, body } = buildDocEmail(
+        {
+          doc_type: doc.doc_type,
+          doc_number: doc.doc_number,
+          client_name: doc.client_name,
+          due_date: doc.due_date,
+          valid_until: doc.valid_until,
+          total: doc.total,
+          currency: doc.currency,
+        },
+        settings
+      );
+
+      const confirmed = window.confirm(
+        `Send this ${doc.doc_type} to ${doc.client_email || "(no email on file)"} from ${gmail.connectedEmail}?\n\n` +
+          `Subject: ${subject}`
+      );
+      if (!confirmed) return;
+
+      if (!doc.client_email) {
+        alert("This document has no client email saved — add one before sending.");
+        return;
+      }
+
+      setSendingId(doc.id);
+      try {
+        const pdfBlob = await getDocumentPDFBlob(mapDocForPdf(doc), companySettingsForPdf());
+        await gmail.sendEmail({
+          to: doc.client_email,
+          subject,
+          bodyText: body,
+          pdfBlob,
+          pdfFilename: `${doc.doc_type}-${doc.doc_number}.pdf`,
+        });
+        alert(`Sent to ${doc.client_email}.`);
+      } catch (err) {
+        alert("Send failed: " + err.message);
+      } finally {
+        setSendingId(null);
+      }
+      return;
+    }
+
+    // Fallback: no Gmail connected — download + open a mailto draft instead.
     setDownloadingId(doc.id);
     try {
       await downloadDocumentPDF(
@@ -148,20 +196,25 @@ export default function BillingTab() {
       setDownloadingId(null);
     }
 
-    const senderName = settings?.company_name || "";
-    const subject = `${doc.doc_title || doc.doc_type} ${doc.doc_number}`;
-    const body =
-      `Hi ${doc.client_name || ""},\n\n` +
-      `Please find attached your ${doc.doc_type} ${doc.doc_number}.\n\n` +
-      `The PDF was just downloaded to your computer — attach it to this email before sending.\n\n` +
-      `Thank you,\n${senderName}`;
+    const { subject, body } = buildDocEmail(
+      {
+        doc_type: doc.doc_type,
+        doc_number: doc.doc_number,
+        client_name: doc.client_name,
+        due_date: doc.due_date,
+        valid_until: doc.valid_until,
+        total: doc.total,
+        currency: doc.currency,
+      },
+      settings
+    );
+    const noteForManualAttach =
+      `${body}\n\n(The PDF was just downloaded — attach it to this email before sending.)`;
 
     const mailtoUrl = `mailto:${encodeURIComponent(doc.client_email || "")}?subject=${encodeURIComponent(
       subject
-    )}&body=${encodeURIComponent(body)}`;
+    )}&body=${encodeURIComponent(noteForManualAttach)}`;
 
-    // A brief delay so the download has visibly started before the email
-    // app takes over focus — purely a UX nicety, not required for either to work.
     setTimeout(() => {
       window.location.href = mailtoUrl;
     }, 400);
@@ -264,12 +317,22 @@ export default function BillingTab() {
                   </button>
                   <button
                     onClick={() => handleSend(doc)}
-                    disabled={downloadingId === doc.id}
+                    disabled={downloadingId === doc.id || sendingId === doc.id}
                     className="text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
                     style={{ background: "#0f1729", color: "#2dce89" }}
-                    title="Downloads the PDF, then opens your email app — attach the downloaded file before sending"
+                    title={
+                      gmail.isConnected
+                        ? `Sends from ${gmail.connectedEmail} with the PDF attached`
+                        : "Downloads the PDF, then opens your email app — attach the downloaded file before sending"
+                    }
                   >
-                    {downloadingId === doc.id ? "Preparing..." : "Send"}
+                    {sendingId === doc.id
+                      ? "Sending..."
+                      : downloadingId === doc.id
+                      ? "Preparing..."
+                      : gmail.isConnected
+                      ? "Send"
+                      : "Send (manual)"}
                   </button>
                   {doc.doc_type === "quote" && (
                     <button
