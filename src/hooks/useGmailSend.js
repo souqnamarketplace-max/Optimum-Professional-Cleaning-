@@ -1,13 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { supabase } from "../api/supabaseClient";
 
-// Two scopes requested together:
-// - gmail.send: narrow, send-only Gmail access — this is what actually
-//   lets the app send the email.
-// - email/openid: lightweight, non-sensitive scopes that let us read back
-//   which address is connected (gmail.send alone isn't enough to call any
-//   Google endpoint that returns the account's email — it's send-only by
-//   design, so a separate identity scope is required just to know who
-//   we're connected as).
+// Authorization-code flow (not the implicit "token" flow) is required to
+// get a refresh token back from Google at all — the implicit flow used
+// previously only ever returns a short-lived access token with no way to
+// renew it without showing the popup again.
 const GMAIL_SCOPE =
   "https://www.googleapis.com/auth/gmail.send " +
   "https://www.googleapis.com/auth/userinfo.email " +
@@ -37,8 +34,6 @@ function loadGoogleScript() {
   });
 }
 
-// Builds a base64url-encoded raw RFC 2822 email with a single PDF
-// attachment, in the format the Gmail API's messages.send expects.
 async function buildRawEmail({ to, from, subject, bodyText, pdfBlob, pdfFilename }) {
   const pdfBase64 = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -76,64 +71,110 @@ async function buildRawEmail({ to, from, subject, bodyText, pdfBlob, pdfFilename
 
   const raw = `${headers}\r\n\r\n${textPart}\r\n${attachmentPart}\r\n--${boundary}--`;
 
-  // btoa() only accepts Latin1 — if a client's name or address has an
-  // accented character (e.g. "Café", "Côte"), btoa would throw
-  // InvalidCharacterError. Encoding to UTF-8 bytes first avoids that.
   const utf8Bytes = new TextEncoder().encode(raw);
   let binaryString = "";
   utf8Bytes.forEach((byte) => {
     binaryString += String.fromCharCode(byte);
   });
 
-  // Gmail API requires base64url (no padding, - and _ instead of + and /)
   return btoa(binaryString)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
+const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
+async function callEdgeFunction(name, body) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (!accessToken) throw new Error("You're not logged in.");
+
+  const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && data.connected !== false) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
 export function useGmailSend() {
-  const [connectedEmail, setConnectedEmail] = useState(
-    () => sessionStorage.getItem("gmail_connected_email") || ""
-  );
+  const [connectedEmail, setConnectedEmail] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
-  const tokenClientRef = useRef(null);
-  const accessTokenRef = useRef(sessionStorage.getItem("gmail_access_token") || "");
-  const tokenExpiryRef = useRef(Number(sessionStorage.getItem("gmail_token_expiry") || 0));
+  const accessTokenRef = useRef("");
+  const tokenExpiryRef = useRef(0);
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  // For popup mode, Google's library defaults redirect_uri to the page's
+  // *origin* (no path) — per Google's own docs: "the value of redirect_uri
+  // defaults to the origin of the page that calls initCodeClient." We pass
+  // it explicitly here only so the exact same value can be reused in the
+  // token-exchange call on the backend; it must be the bare origin, not
+  // origin+pathname, or the token exchange will reject it as mismatched.
+  const redirectUri = window.location.origin;
 
-  const isConnected = Boolean(connectedEmail) && Date.now() < tokenExpiryRef.current;
+  // Silently checks for (and refreshes) an existing server-side connection
+  // on load — this is what makes the connection survive a closed tab or a
+  // new day, with no popup, no clicking anything.
+  const silentRefresh = useCallback(async () => {
+    setChecking(true);
+    try {
+      const data = await callEdgeFunction("gmail-oauth-refresh");
+      if (data.connected === false) {
+        setIsConnected(false);
+        setConnectedEmail("");
+        if (data.error) setError(data.error);
+        return false;
+      }
+      accessTokenRef.current = data.access_token;
+      tokenExpiryRef.current = Date.now() + (data.expires_in || 3600) * 1000;
+      setConnectedEmail(data.email);
+      setIsConnected(true);
+      setError("");
+      return true;
+    } catch (err) {
+      // A failed check just means "not connected yet" in the common case
+      // (e.g. brand new user, function not deployed yet) — don't show this
+      // as an alarming error on every page load.
+      setIsConnected(false);
+      setConnectedEmail("");
+      return false;
+    } finally {
+      setChecking(false);
+    }
+  }, []);
 
-  // The token is intentionally kept in sessionStorage, not localStorage or
-  // a database — it's a short-lived (~1hr) Gmail send-only credential.
-  // Persisting it longer/server-side would mean storing a credential that
-  // can send email as the customer, which isn't something this app should
-  // hold onto past the current browser session.
-  const persistToken = (token, email, expiresInSeconds) => {
-    const expiry = Date.now() + expiresInSeconds * 1000;
-    accessTokenRef.current = token;
-    tokenExpiryRef.current = expiry;
-    sessionStorage.setItem("gmail_access_token", token);
-    sessionStorage.setItem("gmail_token_expiry", String(expiry));
-    sessionStorage.setItem("gmail_connected_email", email);
-    setConnectedEmail(email);
-  };
+  useEffect(() => {
+    silentRefresh();
+  }, [silentRefresh]);
 
-  const disconnect = () => {
+  const disconnect = useCallback(async () => {
+    try {
+      await callEdgeFunction("gmail-oauth-disconnect");
+    } catch (err) {
+      // Even if the remote revoke call fails, clear local state so the UI
+      // doesn't get stuck showing "Connected" when the person asked to stop.
+    }
     accessTokenRef.current = "";
     tokenExpiryRef.current = 0;
-    sessionStorage.removeItem("gmail_access_token");
-    sessionStorage.removeItem("gmail_token_expiry");
-    sessionStorage.removeItem("gmail_connected_email");
+    setIsConnected(false);
     setConnectedEmail("");
-  };
+  }, []);
 
   const connect = useCallback(async () => {
     if (!clientId) {
       setError(
-        "Gmail isn't configured yet — VITE_GOOGLE_CLIENT_ID is missing. See SETUP_GUIDE.md."
+        "Gmail isn't configured yet — VITE_GOOGLE_CLIENT_ID is missing. See GMAIL_SETUP_GUIDE.md."
       );
       return;
     }
@@ -142,54 +183,52 @@ export function useGmailSend() {
     try {
       await loadGoogleScript();
 
-      await new Promise((resolve, reject) => {
-        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      const code = await new Promise((resolve, reject) => {
+        const codeClient = window.google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: GMAIL_SCOPE,
-          callback: async (response) => {
+          ux_mode: "popup",
+          // access_type=offline + prompt=consent together are what make
+          // Google actually issue a refresh token on this consent, even
+          // for an account that connected before under the old flow.
+          access_type: "offline",
+          prompt: "consent",
+          redirect_uri: redirectUri,
+          callback: (response) => {
             if (response.error) {
               reject(new Error(response.error_description || response.error));
               return;
             }
-            try {
-              // Now that we request the "email"/"openid" scopes alongside
-              // gmail.send, this endpoint is authorized to return the
-              // connected account's address.
-              const profileRes = await fetch(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
-                { headers: { Authorization: `Bearer ${response.access_token}` } }
-              );
-              let email = "";
-              if (profileRes.ok) {
-                const profile = await profileRes.json();
-                email = profile.email || "";
-              }
-              // A working send-capable token is the important part — if we
-              // simply couldn't look up the display address for some
-              // reason, still save the token (Send will work) rather than
-              // throwing the whole connection away over a cosmetic lookup.
-              persistToken(response.access_token, email || "Gmail account", response.expires_in || 3600);
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
+            resolve(response.code);
           },
         });
-        tokenClientRef.current = tokenClient;
-        tokenClient.requestAccessToken({ prompt: "consent" });
+        codeClient.requestCode();
       });
+
+      const data = await callEdgeFunction("gmail-oauth-exchange", { code, redirectUri });
+      accessTokenRef.current = data.access_token;
+      tokenExpiryRef.current = Date.now() + (data.expires_in || 3600) * 1000;
+      setConnectedEmail(data.email);
+      setIsConnected(true);
     } catch (err) {
       setError(err.message || "Could not connect Gmail.");
     } finally {
       setConnecting(false);
     }
-  }, [clientId]);
+  }, [clientId, redirectUri]);
+
+  const ensureFreshToken = useCallback(async () => {
+    if (accessTokenRef.current && Date.now() < tokenExpiryRef.current - 60_000) {
+      return accessTokenRef.current; // still valid for at least another minute
+    }
+    const ok = await silentRefresh();
+    if (!ok) throw new Error("Gmail isn't connected. Click Connect Gmail in Settings first.");
+    return accessTokenRef.current;
+  }, [silentRefresh]);
 
   const sendEmail = useCallback(
     async ({ to, subject, bodyText, pdfBlob, pdfFilename }) => {
-      if (!isConnected) {
-        throw new Error("Gmail isn't connected. Click Connect Gmail in Settings first.");
-      }
+      const token = await ensureFreshToken();
       const raw = await buildRawEmail({
         to,
         from: connectedEmail,
@@ -204,7 +243,7 @@ export function useGmailSend() {
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${accessTokenRef.current}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ raw }),
@@ -213,19 +252,18 @@ export function useGmailSend() {
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(
-          errBody.error?.message || `Gmail send failed (${res.status})`
-        );
+        throw new Error(errBody.error?.message || `Gmail send failed (${res.status})`);
       }
       return res.json();
     },
-    [isConnected, connectedEmail]
+    [connectedEmail, ensureFreshToken]
   );
 
   return {
     isConnected,
     connectedEmail,
     connecting,
+    checking,
     error,
     connect,
     disconnect,
