@@ -144,14 +144,23 @@ export function useGmailSend() {
               return;
             }
             try {
-              // Fetch the connected account's email address so we can show
-              // "Connected as you@gmail.com" and use it as the From address.
+              // Get the connected account's email from Gmail's own profile
+              // endpoint rather than the separate oauth2/userinfo endpoint —
+              // this only requires the Gmail API (already enabled for
+              // sending) instead of also needing the People API enabled.
               const profileRes = await fetch(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
+                "https://gmail.googleapis.com/gmail/v1/users/me/profile",
                 { headers: { Authorization: `Bearer ${response.access_token}` } }
               );
+              if (!profileRes.ok) {
+                const errBody = await profileRes.json().catch(() => ({}));
+                throw new Error(
+                  errBody.error?.message ||
+                    `Could not read the connected Gmail address (${profileRes.status}).`
+                );
+              }
               const profile = await profileRes.json();
-              persistToken(response.access_token, profile.email, response.expires_in || 3600);
+              persistToken(response.access_token, profile.emailAddress, response.expires_in || 3600);
               resolve();
             } catch (err) {
               reject(err);
