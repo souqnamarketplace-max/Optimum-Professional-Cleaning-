@@ -16,6 +16,10 @@ create table if not exists site_settings (
   default_currency text default 'CAD',
   default_tax_label text default 'GST',
   default_tax_rate numeric default 5,
+  etransfer_email text,
+  bank_institution text,
+  bank_transit text,
+  bank_account text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );

@@ -385,7 +385,15 @@ export async function generateDocumentPDF(doc, companySettings = {}) {
     pdf.setFont(undefined, "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(90, 90, 90);
-    const lines = pdf.splitTextToSize(content.trim(), PAGE.width - MARGIN * 2 - 8);
+
+    // Split on explicit newlines first (so distinct facts like "e-Transfer: ..."
+    // and "Direct deposit: ..." land on their own lines), then wrap each of
+    // those independently for width — otherwise splitTextToSize treats the
+    // whole block as one paragraph and runs separate lines together.
+    const paragraphs = content.trim().split("\n");
+    const lines = paragraphs.flatMap((p) =>
+      pdf.splitTextToSize(p, PAGE.width - MARGIN * 2 - 8)
+    );
 
     lines.forEach((line) => {
       checkPageBreak(6);
@@ -405,6 +413,36 @@ export async function generateDocumentPDF(doc, companySettings = {}) {
 
   renderTextBlock("Notes", doc.notes, BRAND.teal);
   renderTextBlock("Terms & Conditions", doc.terms, BRAND.green);
+
+  // ---- Payment Information ----
+  // Built from whatever the company actually filled in on Settings — never
+  // shows a labeled field with nothing next to it. If neither e-Transfer
+  // nor bank details are set at all, the whole section is skipped rather
+  // than appearing as an empty "Payment Information" header.
+  const paymentLines = [];
+  if (companySettings.etransferEmail?.trim()) {
+    paymentLines.push(`e-Transfer: ${companySettings.etransferEmail.trim()}`);
+  }
+  const hasBankDetails =
+    companySettings.bankInstitution?.trim() ||
+    companySettings.bankTransit?.trim() ||
+    companySettings.bankAccount?.trim();
+  if (hasBankDetails) {
+    const bankParts = [];
+    if (companySettings.bankInstitution?.trim()) {
+      bankParts.push(`Institution ${companySettings.bankInstitution.trim()}`);
+    }
+    if (companySettings.bankTransit?.trim()) {
+      bankParts.push(`Transit ${companySettings.bankTransit.trim()}`);
+    }
+    if (companySettings.bankAccount?.trim()) {
+      bankParts.push(`Account ${companySettings.bankAccount.trim()}`);
+    }
+    paymentLines.push(`Direct deposit: ${bankParts.join(" · ")}`);
+  }
+  if (paymentLines.length > 0) {
+    renderTextBlock("Payment Information", paymentLines.join("\n"), BRAND.teal);
+  }
 
   // ---- Footer page numbers ----
   const totalPages = pdf.internal.getNumberOfPages();

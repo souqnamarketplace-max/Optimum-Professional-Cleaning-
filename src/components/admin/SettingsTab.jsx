@@ -78,6 +78,10 @@ export default function SettingsTab() {
     defaultCurrency: "CAD",
     defaultTaxLabel: "GST",
     defaultTaxRate: 5,
+    etransferEmail: "",
+    bankInstitution: "",
+    bankTransit: "",
+    bankAccount: "",
   });
   const [taxPreset, setTaxPreset] = useState("gst");
   const [saving, setSaving] = useState(false);
@@ -96,6 +100,10 @@ export default function SettingsTab() {
         defaultCurrency: settings.default_currency || "CAD",
         defaultTaxLabel: settings.default_tax_label ?? "GST",
         defaultTaxRate: settings.default_tax_rate ?? 5,
+        etransferEmail: settings.etransfer_email || "",
+        bankInstitution: settings.bank_institution || "",
+        bankTransit: settings.bank_transit || "",
+        bankAccount: settings.bank_account || "",
       });
       // Try to match a known preset so the dropdown reflects saved values;
       // falls back to "custom" if it doesn't match any preset exactly.
@@ -159,6 +167,10 @@ export default function SettingsTab() {
         default_currency: form.defaultCurrency,
         default_tax_label: form.defaultTaxLabel,
         default_tax_rate: form.defaultTaxRate === "" ? 0 : Number(form.defaultTaxRate),
+        etransfer_email: form.etransferEmail,
+        bank_institution: form.bankInstitution,
+        bank_transit: form.bankTransit,
+        bank_account: form.bankAccount,
       });
       setMessage("Settings saved.");
     } catch (err) {
@@ -248,6 +260,49 @@ export default function SettingsTab() {
             disabled={uploading}
             className="text-sm text-slate-400"
           />
+        </div>
+      </div>
+
+      <div className="pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 className="text-sm font-semibold text-slate-300 mb-1">Payment information</h3>
+        <p className="text-slate-500 text-xs mb-4">
+          Shown on every quote, invoice, and receipt so clients know how to pay you.
+          Fill in whichever method(s) you use — anything left blank simply won't
+          appear on the document.
+        </p>
+
+        <div className="space-y-4">
+          <Field
+            label="e-Transfer email or phone"
+            field="etransferEmail"
+            placeholder="you@email.com or 780-555-0123"
+            value={form.etransferEmail}
+            onChange={handleChange("etransferEmail")}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Field
+              label="Institution number"
+              field="bankInstitution"
+              placeholder="001"
+              value={form.bankInstitution}
+              onChange={handleChange("bankInstitution")}
+            />
+            <Field
+              label="Transit number"
+              field="bankTransit"
+              placeholder="12345"
+              value={form.bankTransit}
+              onChange={handleChange("bankTransit")}
+            />
+            <Field
+              label="Account number"
+              field="bankAccount"
+              placeholder="1234567"
+              value={form.bankAccount}
+              onChange={handleChange("bankAccount")}
+            />
+          </div>
         </div>
       </div>
 

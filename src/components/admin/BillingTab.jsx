@@ -166,6 +166,10 @@ export default function BillingTab({ initialClientFilter, onClientFilterConsumed
     website: settings?.website,
     address: settings?.address,
     logoUrl: settings?.logo_url,
+    etransferEmail: settings?.etransfer_email,
+    bankInstitution: settings?.bank_institution,
+    bankTransit: settings?.bank_transit,
+    bankAccount: settings?.bank_account,
   });
 
   const handleDownload = async (doc) => {
