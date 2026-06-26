@@ -2,13 +2,17 @@ import React, { useState } from "react";
 import { useAuth } from "../lib/AuthContext";
 import SettingsTab from "../components/admin/SettingsTab";
 import BillingTab from "../components/admin/BillingTab";
+import ClientsTab from "../components/admin/ClientsTab";
+import OverviewTab from "../components/admin/OverviewTab";
 
 export default function Dashboard() {
-  const [tab, setTab] = useState("billing");
+  const [tab, setTab] = useState("overview");
   const { logout, user } = useAuth();
 
   const tabs = [
+    { key: "overview", label: "Overview" },
     { key: "billing", label: "Billing" },
+    { key: "clients", label: "Clients" },
     { key: "settings", label: "Settings" },
   ];
 
@@ -49,7 +53,9 @@ export default function Dashboard() {
         </nav>
 
         <main className="flex-1 p-6">
+          {tab === "overview" && <OverviewTab onNavigate={setTab} />}
           {tab === "billing" && <BillingTab />}
+          {tab === "clients" && <ClientsTab />}
           {tab === "settings" && <SettingsTab />}
         </main>
       </div>

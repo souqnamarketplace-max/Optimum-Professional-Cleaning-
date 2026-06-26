@@ -9,6 +9,46 @@ const fmtMoney = (n, currency = "USD") => {
   return `${symbol}${val}`;
 };
 
+// Loads an image URL (e.g. Supabase Storage public URL) and converts it to
+// a base64 data URL + its natural pixel size, since jsPDF can only embed
+// images it already has as base64 — it cannot fetch a remote URL itself.
+const loadImageAsDataUrl = (url) =>
+  new Promise((resolve) => {
+    if (!url) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        resolve({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      } catch (e) {
+        // Canvas can throw on cross-origin taint even with crossOrigin set,
+        // depending on the storage host's CORS headers. Fail soft — the PDF
+        // still generates, just without the logo, instead of crashing.
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+
+// A row only prints in the PDF if it actually has something in it —
+// an empty placeholder row (no name, no price) is skipped rather than
+// showing up as a blank numbered line on the document.
+const hasItemContent = (item) =>
+  Boolean(item?.name?.trim()) || Number(item?.unitPrice) > 0;
+
 const calcLineTotal = (item) => {
   const qty = Number(item.qty || 0);
   const price = Number(item.unitPrice || 0);
@@ -44,9 +84,11 @@ const BRAND = { green: [45, 206, 137], teal: [17, 205, 239], dark: [10, 14, 26] 
 
 // ---------- core renderer ----------
 
-export function generateDocumentPDF(doc, companySettings = {}) {
+export async function generateDocumentPDF(doc, companySettings = {}) {
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
   const { subtotal, taxAmount, total } = calcDocumentTotals(doc);
+
+  const logo = await loadImageAsDataUrl(companySettings.logoUrl);
 
   let y = MARGIN;
   let page = 1;
@@ -101,26 +143,40 @@ export function generateDocumentPDF(doc, companySettings = {}) {
   };
 
   // ---- Title block ----
+  const LOGO_SIZE = 18; // mm, square box
+  let textStartX = MARGIN;
+
+  if (logo) {
+    const aspect = logo.width / logo.height;
+    const drawW = aspect >= 1 ? LOGO_SIZE : LOGO_SIZE * aspect;
+    const drawH = aspect >= 1 ? LOGO_SIZE / aspect : LOGO_SIZE;
+    pdf.addImage(logo.dataUrl, "PNG", MARGIN, y - 2, drawW, drawH);
+    textStartX = MARGIN + LOGO_SIZE + 6;
+  }
+
   pdf.setFontSize(20);
   pdf.setTextColor(...BRAND.dark);
   pdf.setFont(undefined, "bold");
-  pdf.text(companySettings.companyName || "Your Company", MARGIN, y);
+  pdf.text(companySettings.companyName || "Your Company", textStartX, y);
   pdf.setFont(undefined, "normal");
   pdf.setFontSize(9);
   pdf.setTextColor(100, 100, 100);
   y += 6;
   if (companySettings.address) {
-    pdf.text(companySettings.address, MARGIN, y);
+    pdf.text(companySettings.address, textStartX, y);
     y += 5;
   }
   if (companySettings.email) {
-    pdf.text(companySettings.email, MARGIN, y);
+    pdf.text(companySettings.email, textStartX, y);
     y += 5;
   }
   if (companySettings.website) {
-    pdf.text(companySettings.website, MARGIN, y);
+    pdf.text(companySettings.website, textStartX, y);
     y += 5;
   }
+  // Make sure we clear the bottom of the logo box even if the company
+  // text block above it was short (e.g. no address/website filled in).
+  y = Math.max(y, MARGIN - 2 + LOGO_SIZE + 4);
 
   // doc type label, top right
   pdf.setFontSize(22);
@@ -145,6 +201,13 @@ export function generateDocumentPDF(doc, companySettings = {}) {
   }
   if (doc.docType === "quote" && doc.validUntil) {
     pdf.text(`Valid until: ${doc.validUntil}`, PAGE.width - MARGIN, MARGIN + 25, {
+      align: "right",
+    });
+  }
+  if (doc.convertedFrom) {
+    pdf.setFontSize(8);
+    pdf.setTextColor(140, 140, 140);
+    pdf.text(`Converted from ${doc.convertedFrom}`, PAGE.width - MARGIN, MARGIN + 30, {
       align: "right",
     });
   }
@@ -214,6 +277,9 @@ export function generateDocumentPDF(doc, companySettings = {}) {
 
   if (doc.useSystems && doc.systems?.length) {
     doc.systems.forEach((system) => {
+      const visibleItems = (system.items || []).filter(hasItemContent);
+      if (visibleItems.length === 0) return;
+
       checkPageBreak(14);
       pdf.setFontSize(11);
       pdf.setFont(undefined, "bold");
@@ -224,9 +290,9 @@ export function generateDocumentPDF(doc, companySettings = {}) {
 
       if (doc.showUnitPrices) drawTableHeader();
 
-      (system.items || []).forEach((item, idx) => renderItemRow(item, idx));
+      visibleItems.forEach((item, idx) => renderItemRow(item, idx));
 
-      const groupSubtotal = calcGroupSubtotal(system.items || []);
+      const groupSubtotal = calcGroupSubtotal(visibleItems);
       checkPageBreak(8);
       pdf.setFont(undefined, "bold");
       pdf.setTextColor(...BRAND.dark);
@@ -240,8 +306,9 @@ export function generateDocumentPDF(doc, companySettings = {}) {
       y += 10;
     });
   } else {
+    const visibleItems = (doc.items || []).filter(hasItemContent);
     if (doc.showUnitPrices) drawTableHeader();
-    (doc.items || []).forEach((item, idx) => renderItemRow(item, idx));
+    visibleItems.forEach((item, idx) => renderItemRow(item, idx));
   }
 
   // ---- Totals ----
@@ -260,7 +327,8 @@ export function generateDocumentPDF(doc, companySettings = {}) {
   y += 6;
 
   if (Number(doc.taxRate) > 0) {
-    pdf.text(`Tax (${doc.taxRate}%)`, PAGE.width - MARGIN - 70, y);
+    const label = doc.taxLabel?.trim() || "Tax";
+    pdf.text(`${label} (${doc.taxRate}%)`, PAGE.width - MARGIN - 70, y);
     pdf.text(fmtMoney(taxAmount, doc.currency), PAGE.width - MARGIN, y, {
       align: "right",
     });
@@ -315,8 +383,8 @@ export function generateDocumentPDF(doc, companySettings = {}) {
   return pdf;
 }
 
-export function downloadDocumentPDF(doc, companySettings, filename) {
-  const pdf = generateDocumentPDF(doc, companySettings);
+export async function downloadDocumentPDF(doc, companySettings, filename) {
+  const pdf = await generateDocumentPDF(doc, companySettings);
   pdf.save(filename || `${doc.docType}-${doc.docNumber}.pdf`);
 }
 

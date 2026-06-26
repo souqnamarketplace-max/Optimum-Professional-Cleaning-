@@ -11,6 +11,7 @@ export default function BillingTab() {
   const [loading, setLoading] = useState(true);
   const [editingDoc, setEditingDoc] = useState(null); // null = list view, "new" = creating, object = editing
   const [filterType, setFilterType] = useState("all");
+  const [downloadingId, setDownloadingId] = useState(null);
   const { settings } = useSiteSettings();
 
   const fetchDocuments = useCallback(async () => {
@@ -33,20 +34,33 @@ export default function BillingTab() {
     fetchDocuments();
   };
 
+  const PREFIX = { quote: "Q", invoice: "INV", receipt: "REC" };
+
   const handleConvert = async (doc, targetType) => {
-    // Creates a NEW document of targetType, linked to the original, copying items/systems.
+    // Get the next sequential number for the target type (e.g. next "Q" or "INV" number)
+    const { data: nextNum, error: numError } = await supabase.rpc(
+      "get_next_doc_number",
+      { p_doc_type: targetType }
+    );
+    if (numError) {
+      alert("Could not generate document number: " + numError.message);
+      return;
+    }
+
     const payload = {
       doc_type: targetType,
-      doc_number: `${targetType.toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-6)}`,
+      doc_number: `${PREFIX[targetType]}-${nextNum}`,
       client_name: doc.client_name,
       client_email: doc.client_email,
       client_address: doc.client_address,
+      client_phone: doc.client_phone,
       issue_date: new Date().toISOString().slice(0, 10),
       due_date: targetType === "invoice" ? doc.due_date : null,
       valid_until: targetType === "quote" ? doc.valid_until : null,
       items: doc.items,
       systems: doc.systems,
       subtotal: doc.subtotal,
+      tax_label: doc.tax_label,
       tax_rate: doc.tax_rate,
       tax_amount: doc.tax_amount,
       total: doc.total,
@@ -56,6 +70,7 @@ export default function BillingTab() {
       currency: doc.currency,
       status: targetType === "receipt" ? "paid" : "pending",
       linked_invoice_id: targetType === "receipt" ? doc.id : doc.linked_invoice_id,
+      converted_from: doc.doc_number,
       show_unit_prices: doc.show_unit_prices,
       use_systems: doc.use_systems,
     };
@@ -67,7 +82,8 @@ export default function BillingTab() {
     fetchDocuments();
   };
 
-  const handleDownload = (doc) => {
+  const handleDownload = async (doc) => {
+    setDownloadingId(doc.id);
     const mapped = {
       docType: doc.doc_type,
       docNumber: doc.doc_number,
@@ -78,10 +94,12 @@ export default function BillingTab() {
       issueDate: doc.issue_date,
       dueDate: doc.due_date,
       validUntil: doc.valid_until,
+      convertedFrom: doc.converted_from,
       items: doc.items || [],
       systems: doc.systems || [],
       useSystems: doc.use_systems,
       showUnitPrices: doc.show_unit_prices,
+      taxLabel: doc.tax_label,
       taxRate: doc.tax_rate,
       currency: doc.currency,
       notes: doc.notes,
@@ -92,8 +110,13 @@ export default function BillingTab() {
       email: settings?.email,
       website: settings?.website,
       address: settings?.address,
+      logoUrl: settings?.logo_url,
     };
-    downloadDocumentPDF(mapped, companySettings, `${doc.doc_type}-${doc.doc_number}.pdf`);
+    try {
+      await downloadDocumentPDF(mapped, companySettings, `${doc.doc_type}-${doc.doc_number}.pdf`);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleSend = (doc) => {
@@ -196,10 +219,11 @@ export default function BillingTab() {
                   </button>
                   <button
                     onClick={() => handleDownload(doc)}
-                    className="text-sm px-3 py-1.5 rounded-lg"
+                    disabled={downloadingId === doc.id}
+                    className="text-sm px-3 py-1.5 rounded-lg disabled:opacity-50"
                     style={{ background: "#0f1729", color: "#11cdef" }}
                   >
-                    PDF
+                    {downloadingId === doc.id ? "Generating..." : "PDF"}
                   </button>
                   <button
                     onClick={() => handleSend(doc)}

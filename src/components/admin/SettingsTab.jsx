@@ -22,6 +22,48 @@ function Field({ label, field, type = "text", placeholder, value, onChange }) {
   );
 }
 
+function Select({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="block text-sm text-slate-300 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full rounded-lg px-4 py-3 text-white outline-none"
+        style={{ background: "#0f1729", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// Common Canadian sales tax presets — picking one fills in both the label
+// and the rate. "Custom" leaves both fields free for manual entry (e.g. for
+// a tax-exempt client, or a province/situation not listed here).
+const TAX_PRESETS = [
+  { value: "custom", label: "Custom (enter manually)", taxLabel: "", taxRate: "" },
+  { value: "gst", label: "GST only — 5% (AB, most territories)", taxLabel: "GST", taxRate: 5 },
+  { value: "hst-on", label: "HST — 13% (Ontario)", taxLabel: "HST", taxRate: 13 },
+  { value: "hst-maritimes", label: "HST — 15% (NS, NB, NL, PE)", taxLabel: "HST", taxRate: 15 },
+  { value: "gst-pst-bc", label: "GST + PST — 5% + 7% (BC)", taxLabel: "GST+PST", taxRate: 12 },
+  { value: "gst-pst-sk", label: "GST + PST — 5% + 6% (Saskatchewan)", taxLabel: "GST+PST", taxRate: 11 },
+  { value: "gst-pst-mb", label: "GST + PST — 5% + 7% (Manitoba)", taxLabel: "GST+PST", taxRate: 12 },
+  { value: "gst-qst", label: "GST + QST — 5% + 9.975% (Quebec)", taxLabel: "GST+QST", taxRate: 14.975 },
+  { value: "none", label: "No tax charged", taxLabel: "", taxRate: 0 },
+];
+
+const CURRENCIES = [
+  { value: "CAD", label: "CAD — Canadian Dollar" },
+  { value: "USD", label: "USD — US Dollar" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "GBP", label: "GBP — British Pound" },
+];
+
 export default function SettingsTab() {
   const { settings, loading, updateSettings } = useSiteSettings();
   const [form, setForm] = useState({
@@ -31,7 +73,11 @@ export default function SettingsTab() {
     address: "",
     phone: "",
     logoUrl: "",
+    defaultCurrency: "CAD",
+    defaultTaxLabel: "GST",
+    defaultTaxRate: 5,
   });
+  const [taxPreset, setTaxPreset] = useState("gst");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -45,12 +91,36 @@ export default function SettingsTab() {
         address: settings.address || "",
         phone: settings.phone || "",
         logoUrl: settings.logo_url || "",
+        defaultCurrency: settings.default_currency || "CAD",
+        defaultTaxLabel: settings.default_tax_label ?? "GST",
+        defaultTaxRate: settings.default_tax_rate ?? 5,
       });
+      // Try to match a known preset so the dropdown reflects saved values;
+      // falls back to "custom" if it doesn't match any preset exactly.
+      const match = TAX_PRESETS.find(
+        (p) =>
+          p.taxLabel === (settings.default_tax_label ?? "GST") &&
+          Number(p.taxRate) === Number(settings.default_tax_rate ?? 5)
+      );
+      setTaxPreset(match ? match.value : "custom");
     }
   }, [settings]);
 
   const handleChange = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleTaxPresetChange = (e) => {
+    const presetValue = e.target.value;
+    setTaxPreset(presetValue);
+    const preset = TAX_PRESETS.find((p) => p.value === presetValue);
+    if (preset && presetValue !== "custom") {
+      setForm((f) => ({
+        ...f,
+        defaultTaxLabel: preset.taxLabel,
+        defaultTaxRate: preset.taxRate,
+      }));
+    }
+  };
 
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -84,6 +154,9 @@ export default function SettingsTab() {
         address: form.address,
         phone: form.phone,
         logo_url: form.logoUrl,
+        default_currency: form.defaultCurrency,
+        default_tax_label: form.defaultTaxLabel,
+        default_tax_rate: form.defaultTaxRate === "" ? 0 : Number(form.defaultTaxRate),
       });
       setMessage("Settings saved.");
     } catch (err) {
@@ -107,6 +180,53 @@ export default function SettingsTab() {
       <Field label="Website" field="website" placeholder="https://acme.com" value={form.website} onChange={handleChange("website")} />
       <Field label="Address" field="address" placeholder="123 Main St, City, Province" value={form.address} onChange={handleChange("address")} />
       <Field label="Phone (optional)" field="phone" placeholder="" value={form.phone} onChange={handleChange("phone")} />
+
+      <div className="pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <h3 className="text-sm font-semibold text-slate-300 mb-1">Billing defaults</h3>
+        <p className="text-slate-500 text-xs mb-4">
+          Used to pre-fill every new Quote, Invoice, and Receipt — you can still
+          override these per document. If Tax Rate is 0, no tax line is shown
+          on the document at all.
+        </p>
+      </div>
+
+      <Select
+        label="Default Currency"
+        value={form.defaultCurrency}
+        onChange={handleChange("defaultCurrency")}
+        options={CURRENCIES}
+      />
+
+      <Select
+        label="Tax Preset"
+        value={taxPreset}
+        onChange={handleTaxPresetChange}
+        options={TAX_PRESETS}
+      />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field
+          label="Tax Label"
+          field="defaultTaxLabel"
+          placeholder="GST"
+          value={form.defaultTaxLabel}
+          onChange={(e) => {
+            setTaxPreset("custom");
+            handleChange("defaultTaxLabel")(e);
+          }}
+        />
+        <Field
+          label="Tax Rate %"
+          field="defaultTaxRate"
+          type="number"
+          placeholder="5"
+          value={form.defaultTaxRate}
+          onChange={(e) => {
+            setTaxPreset("custom");
+            handleChange("defaultTaxRate")(e);
+          }}
+        />
+      </div>
 
       <div>
         <label className="block text-sm text-slate-300 mb-1">Logo</label>
