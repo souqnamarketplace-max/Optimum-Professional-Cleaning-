@@ -151,6 +151,18 @@ export default function Login() {
           </button>
         </form>
       </div>
+
+      <p className="text-xs text-slate-600 mt-6 text-center">
+        Built by{" "}
+        <a
+          href="https://sn.souqnin.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-slate-500 hover:text-slate-300 underline"
+        >
+          Souqnin Technology Inc.
+        </a>
+      </p>
     </div>
   );
 }

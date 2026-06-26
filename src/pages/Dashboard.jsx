@@ -98,16 +98,43 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 min-w-0">
-          {tab === "overview" && <OverviewTab onNavigate={setTab} />}
-          {tab === "billing" && (
-            <BillingTab
-              initialClientFilter={billingClientFilter}
-              onClientFilterConsumed={() => setBillingClientFilter(null)}
-            />
-          )}
-          {tab === "clients" && <ClientsTab onViewBilling={goToClientBilling} />}
-          {tab === "settings" && <SettingsTab />}
+        <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-6 min-w-0 flex flex-col">
+          <div className="flex-1">
+            {tab === "overview" && <OverviewTab onNavigate={setTab} />}
+            {tab === "billing" && (
+              <BillingTab
+                initialClientFilter={billingClientFilter}
+                onClientFilterConsumed={() => setBillingClientFilter(null)}
+              />
+            )}
+            {tab === "clients" && <ClientsTab onViewBilling={goToClientBilling} />}
+            {tab === "settings" && <SettingsTab />}
+          </div>
+
+          {/* Developer attribution — small and out of the way so it never
+              competes with the customer's own branding, which is what
+              actually matters to whoever's using this app day to day. */}
+          <footer className="mt-10 pt-4 text-center" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <p className="text-xs text-slate-600">
+              Built by{" "}
+              <a
+                href="https://sn.souqnin.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-500 hover:text-slate-300 underline"
+              >
+                Souqnin Technology Inc.
+              </a>
+              {" · "}
+              <a href="mailto:admin@souqnin.com" className="text-slate-500 hover:text-slate-300 underline">
+                admin@souqnin.com
+              </a>
+              {" · "}
+              <a href="tel:+15873942195" className="text-slate-500 hover:text-slate-300 underline">
+                +1 587 394 2195
+              </a>
+            </p>
+          </footer>
         </main>
       </div>
 
